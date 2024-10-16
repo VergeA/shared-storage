@@ -1218,7 +1218,7 @@ Methods that allow the setting and/or deleting of data are exposed to both the {
 
 Meanwhile, methods for posting operations to run inside {{SharedStorageWorkletGlobalScope}} (i.e. {{SharedStorageWorklet/selectURL()}} and {{SharedStorageWorklet/run()}}), along with the {{SharedStorage/worklet}} attribute which is used to call {{Worklet/addModule()}}, are exposed to the {{Window}} only, as these are the means by which the {{Window}} interacts with the {{SharedStorageWorklet}}.
 
-On the other hand, methods for getting data from the [=shared storage database=] are exposed to the {{SharedStorageWorklet}} only, in order to carefully control the flow of data read from the [=shared storage database|database=].
+On the other hand, methods for getting data from the [=shared storage database=] are exposed to the {{SharedStorageWorklet}} only, in order to carefully control the flow of data read from the [=shared storage database|database=]. There is one exception to this rule: {{SharedStorage/get()}} is exposed to {{Window}}, but will only succeed when the {{Window}}'s [=Window/browsing context=]'s [=browsing context/fenced frame config instance=]'s [=fenced frame config instance/untrusted network status=] is [=untrusted network status/disabled for this and descendant trees=]. 
 
 <xmp class='idl'>
   [Exposed=(Window,SharedStorageWorklet)]
@@ -1226,6 +1226,7 @@ On the other hand, methods for getting data from the [=shared storage database=]
     Promise<any> set(DOMString key,
                      DOMString value,
                      optional SharedStorageSetMethodOptions options = {});
+    Promise<DOMString> get(DOMString key);
     Promise<any> append(DOMString key,
                         DOMString value);
     Promise<any> delete(DOMString key);
@@ -1245,9 +1246,6 @@ On the other hand, methods for getting data from the [=shared storage database=]
 
     [Exposed=Window]
     readonly attribute SharedStorageWorklet worklet;
-
-    [Exposed=SharedStorageWorklet]
-    Promise<DOMString> get(DOMString key);
 
     [Exposed=SharedStorageWorklet]
     Promise<unsigned long> length();
@@ -1453,11 +1451,25 @@ On the other hand, methods for getting data from the [=shared storage database=]
     The <dfn method for="SharedStorage">get(|key|)</dfn> method steps are:
 
     1. Let |promise| be a new [=promise=].
-    1. If the result of running [=SharedStorageWorkletGlobalScope/check whether addModule is finished=] for {{SharedStorage}}'s associated {{SharedStorageWorkletGlobalScope}} is false, return a [=promise rejected=] with a {{TypeError}}.
+    1. Let |globalObject| be the [=current realm=]'s [=global object=].
+    1. Let |context| be null.
+    1. If |globalObject| is a {{Window}}:
+       1. Set |context| to |globalObject|'s [=Window/browsing context=]
+    1. Else:
+       1. Set |context| to |globalObject|'s [=outside settings=]'s [=target browsing context=].
+       1. If the result of running [=SharedStorageWorkletGlobalScope/check whether addModule is finished=] for {{SharedStorage}}'s associated {{SharedStorageWorkletGlobalScope}} is false, return a [=promise rejected=] with a {{TypeError}}.
     1. If |key|'s [=string/length=] exceeds the [=key/maximum length=], return a [=promise rejected=] with a {{TypeError}}.
-    1. Let |context| be {{SharedStorage}}'s {{SharedStorageWorkletGlobalScope}}'s [=outside settings=]'s [=target browsing context=].
     1. If |context| is null, return a [=promise rejected=] with a {{TypeError}}.
     1. If |context|'s [=active window=]'s [=associated document=] is not [=fully active=], return a [=promise rejected=] with a {{TypeError}}.
+    1. If |globalObject| is a {{Window}}:
+       1. Let |underFencedNavigable| be false;
+       1. Let |ancestors| be |globalObject|'s [=Window/associated document=]'s [=Document/inclusive ancestor navigables=] given an |unfenced| argument of true.
+       1. For each |navigable| of |ancestors|:
+         1. If |navigable| is a [=fenced navigable container/fenced navigable=], set |underFencedNavigable| to true.
+       1. If |underFencedNavigable| is false, then return a [=promise rejected=] with a new {{DOMException}} with name `OperationError`.
+       1. Let |instance| be |context|'s [=browsing context/fenced frame config instance=]. 
+       1. If |instance| is null, return a [=promise rejected=] with a new {{DOMException}} with name `OperationError`.
+       1. If instance's [=fenced frame config instance/untrusted network status=] is not [=untrusted network status/disabled for this and descendant trees=], return a [=promise rejected=] with a new {{DOMException}} with name `OperationError`.
     1. Let |environment| be |context|'s [=active window=]'s [=relevant settings object=].
     1. Let |realm| be the [=current realm=].
     1. Let |databaseMap| be the result of running [=obtain a shared storage bottle map=] given |environment| and |realm|'s [=realm/settings object=]'s [=environment settings object/origin=].
